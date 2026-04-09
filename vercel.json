@@ -1,6 +1,5 @@
 {
   "buildCommand": null,
-  "outputDirectory": ".",
-  "public": true,
+  "outputDirectory": "public",
   "framework": null
 }
