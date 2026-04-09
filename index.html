@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ClawBuddy Lite - OpenClaw Dashboard</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/lucide@latest/dist/umd/lucide.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <style>
+        * {
+            --scrollbar-color: rgba(99, 102, 241, 0.3);
+        }
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: var(--scrollbar-color);
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(99, 102, 241, 0.5);
+        }
+        .glass {
+            background: rgba(15, 15, 15, 0.7);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(99, 102, 241, 0.1);
+        }
+        .gradient-text {
+            background: linear-gradient(135deg, #6366f1 0%, #a855f7 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .pulse-ring {
+            animation: pulse-ring 2s infinite;
+        }
+        @keyframes pulse-ring {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        .draggable {
+            cursor: grab;
+        }
+        .draggable:active {
+            cursor: grabbing;
+        }
+    </style>
+</head>
+<body class="bg-[#0f0f0f] text-white font-sans">
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        // Configuration
+        const GATEWAY_URL = process.env.REACT_APP_GATEWAY_URL || 'http://127.0.0.1:18789';
+
+        // Mock data - will be replaced with real API calls
+        const mockData = {
+            sessions: [
+                { id: 'agent:main:telegram:direct:5234…', model: 'claude-haiku-4-5', tokens: '31k/200k', age: 'just now', status: 'active' },
+                { id: 'agent:main:main', model: 'llama3.2:3b', tokens: '10k/32k', age: '27m ago', status: 'idle' },
+                { id: 'agent:main:cron:aa624dd8-c343-4…', model: 'llama3.2:3b', tokens: '6.2k/32k', age: '5h ago', status: 'idle' },
+            ],
+            tasks: [
+                { id: 1, title: 'Build ClawBuddy Dashboard', status: 'doing', assignee: 'Claw', deadline: '2026-04-09' },
+                { id: 2, title: 'Connect OpenClaw Gateway', status: 'todo', assignee: 'Claw', deadline: '2026-04-10' },
+                { id: 3, title: 'Deploy to Vercel', status: 'todo', assignee: 'Vy', deadline: '2026-04-11' },
+            ],
+            logs: [
+                { time: '13:30', level: 'info', message: 'Dashboard initialized' },
+                { time: '13:29', level: 'success', message: 'Connected to gateway' },
+                { time: '13:28', level: 'warning', message: 'Memory files not found' },
+            ],
+            stats: {
+                totalSessions: 6,
+                activeAgents: 1,
+                uptime: '24h',
+                totalTokens: '84.4k/392k',
+            }
+        };
+
+        function Dashboard() {
+            const [activeTab, setActiveTab] = useState('dashboard');
+            const [tasks, setTasks] = useState(mockData.tasks);
+            const [draggedTask, setDraggedTask] = useState(null);
+            const [gatewayStatus, setGatewayStatus] = useState('connecting');
+
+            const statuses = ['todo', 'doing', 'needs-input', 'canceled', 'done'];
+            const statusLabels = { 
+                todo: 'To Do', 
+                doing: 'Doing', 
+                'needs-input': 'Needs Input',
+                canceled: 'Canceled',
+                done: 'Done'
+            };
+            const statusColors = {
+                todo: 'bg-slate-600',
+                doing: 'bg-blue-600',
+                'needs-input': 'bg-yellow-600',
+                canceled: 'bg-red-600',
+                done: 'bg-green-600'
+            };
+
+            useEffect(() => {
+                // Check gateway connection
+                const checkGateway = async () => {
+                    try {
+                        const response = await fetch(`${GATEWAY_URL}/status`, {
+                            mode: 'cors',
+                            headers: { 'Accept': 'application/json' }
+                        });
+                        if (response.ok) {
+                            setGatewayStatus('connected');
+                        } else {
+                            setGatewayStatus('error');
+                        }
+                    } catch (error) {
+                        setGatewayStatus('error');
+                    }
+                };
+
+                checkGateway();
+                const interval = setInterval(checkGateway, 10000);
+                return () => clearInterval(interval);
+            }, []);
+
+            const moveTask = (taskId, newStatus) => {
+                setTasks(tasks.map(t => t.id === taskId ? { ...t, status: newStatus } : t));
+            };
+
+            const handleDragStart = (e, task) => {
+                setDraggedTask(task);
+                e.dataTransfer.effectAllowed = 'move';
+            };
+
+            const handleDragOver = (e) => {
+                e.preventDefault();
+                e.dataTransfer.dropEffect = 'move';
+            };
+
+            const handleDrop = (e, status) => {
+                e.preventDefault();
+                if (draggedTask) {
+                    moveTask(draggedTask.id, status);
+                    setDraggedTask(null);
+                }
+            };
+
+            return (
+                <div class="min-h-screen bg-[#0f0f0f]">
+                    {/* Header */}
+                    <div class="border-b border-indigo-500/20 glass sticky top-0 z-50">
+                        <div class="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+                            <div class="flex items-center gap-3">
+                                <div class="w-10 h-10 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-500 flex items-center justify-center">
+                                    🐾
+                                </div>
+                                <div>
+                                    <h1 class="text-xl font-bold gradient-text">ClawBuddy Lite</h1>
+                                    <p class="text-xs text-slate-400">OpenClaw Agent Monitor</p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-4 text-sm">
+                                <div class="flex items-center gap-2 text-slate-400">
+                                    <span class={`w-2 h-2 rounded-full ${gatewayStatus === 'connected' ? 'bg-green-500 pulse-ring' : 'bg-red-500'}`}></span>
+                                    {gatewayStatus === 'connected' ? 'Connected' : 'Disconnected'}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Tabs */}
+                    <div class="border-b border-indigo-500/20 glass sticky top-16 z-40">
+                        <div class="max-w-7xl mx-auto px-6">
+                            <div class="flex gap-8">
+                                {['dashboard', 'tasks', 'logs', 'insights', 'status'].map(tab => (
+                                    <button
+                                        key={tab}
+                                        onClick={() => setActiveTab(tab)}
+                                        class={`py-3 px-1 border-b-2 transition-colors ${
+                                            activeTab === tab
+                                                ? 'border-indigo-500 text-indigo-400'
+                                                : 'border-transparent text-slate-400 hover:text-slate-300'
+                                        }`}
+                                    >
+                                        {tab.charAt(0).toUpperCase() + tab.slice(1)}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Content */}
+                    <div class="max-w-7xl mx-auto px-6 py-8">
+                        {activeTab === 'dashboard' && (
+                            <div class="space-y-6">
+                                {/* Stats Grid */}
+                                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                                    {[
+                                        { label: 'Active Sessions', value: mockData.stats.totalSessions, icon: '🔗' },
+                                        { label: 'Active Agents', value: mockData.stats.activeAgents, icon: '🤖' },
+                                        { label: 'Uptime', value: mockData.stats.uptime, icon: '⏱️' },
+                                        { label: 'Token Usage', value: '42%', icon: '🧠' },
+                                    ].map(stat => (
+                                        <div key={stat.label} class="glass p-4 rounded-lg hover:border-indigo-500/30 transition-colors">
+                                            <div class="flex items-center justify-between mb-2">
+                                                <span class="text-slate-400 text-sm">{stat.label}</span>
+                                                <span class="text-2xl">{stat.icon}</span>
+                                            </div>
+                                            <div class="text-2xl font-bold">{stat.value}</div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Sessions */}
+                                <div class="glass rounded-lg p-6">
+                                    <h2 class="text-lg font-semibold mb-4 flex items-center gap-2">
+                                        <span>🔗</span> Active Sessions
+                                    </h2>
+                                    <div class="space-y-3">
+                                        {mockData.sessions.map(session => (
+                                            <div key={session.id} class="bg-slate-900/50 rounded p-3 flex items-center justify-between">
+                                                <div>
+                                                    <p class="text-sm font-mono">{session.id}</p>
+                                                    <p class="text-xs text-slate-400">{session.model}</p>
+                                                </div>
+                                                <div class="text-right">
+                                                    <p class="text-xs text-indigo-400">{session.tokens}</p>
+                                                    <p class="text-xs text-slate-400">{session.age}</p>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'tasks' && (
+                            <div class="space-y-4">
+                                <h2 class="text-lg font-semibold mb-4">Task Board</h2>
+                                <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+                                    {statuses.map(status => (
+                                        <div
+                                            key={status}
+                                            onDragOver={handleDragOver}
+                                            onDrop={(e) => handleDrop(e, status)}
+                                            class="glass rounded-lg p-4 min-h-96 hover:border-indigo-500/30 transition-colors"
+                                        >
+                                            <div class="flex items-center gap-2 mb-4">
+                                                <div class={`w-3 h-3 rounded-full ${statusColors[status]}`}></div>
+                                                <h3 class="font-semibold text-sm">{statusLabels[status]}</h3>
+                                                <span class="text-xs text-slate-400">
+                                                    {tasks.filter(t => t.status === status).length}
+                                                </span>
+                                            </div>
+                                            <div class="space-y-2">
+                                                {tasks.filter(t => t.status === status).map(task => (
+                                                    <div
+                                                        key={task.id}
+                                                        draggable
+                                                        onDragStart={(e) => handleDragStart(e, task)}
+                                                        class="draggable bg-slate-900/50 rounded p-3 hover:bg-slate-800/50 transition-colors cursor-grab"
+                                                    >
+                                                        <p class="text-sm font-medium">{task.title}</p>
+                                                        <div class="flex items-center justify-between mt-2 pt-2 border-t border-slate-700">
+                                                            <span class="text-xs text-indigo-400">{task.assignee}</span>
+                                                            <span class="text-xs text-slate-500">{task.deadline}</span>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'logs' && (
+                            <div class="glass rounded-lg p-6">
+                                <h2 class="text-lg font-semibold mb-4">Live Logs</h2>
+                                <div class="space-y-2 font-mono text-sm max-h-96 overflow-y-auto">
+                                    {mockData.logs.map((log, i) => (
+                                        <div key={i} class="flex gap-3 text-slate-300">
+                                            <span class="text-slate-500">[{log.time}]</span>
+                                            <span class={log.level === 'error' ? 'text-red-400' : log.level === 'warning' ? 'text-yellow-400' : log.level === 'success' ? 'text-green-400' : 'text-indigo-400'}>
+                                                {log.level.toUpperCase()}
+                                            </span>
+                                            <span class="text-slate-400">{log.message}</span>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'insights' && (
+                            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div class="glass rounded-lg p-6">
+                                    <h3 class="font-semibold mb-4">Token Distribution</h3>
+                                    <div class="space-y-2">
+                                        <div class="flex justify-between text-sm">
+                                            <span>Claude Haiku</span>
+                                            <span class="text-indigo-400">31k</span>
+                                        </div>
+                                        <div class="w-full bg-slate-900 rounded-full h-2">
+                                            <div class="bg-indigo-500 h-2 rounded-full" style={{ width: '40%' }}></div>
+                                        </div>
+                                        <div class="flex justify-between text-sm mt-4">
+                                            <span>Llama 3.2</span>
+                                            <span class="text-purple-400">22.4k</span>
+                                        </div>
+                                        <div class="w-full bg-slate-900 rounded-full h-2">
+                                            <div class="bg-purple-500 h-2 rounded-full" style={{ width: '28%' }}></div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="glass rounded-lg p-6">
+                                    <h3 class="font-semibold mb-4">Session Health</h3>
+                                    <div class="space-y-3">
+                                        <div>
+                                            <div class="flex justify-between text-sm mb-1">
+                                                <span>Active</span>
+                                                <span class="text-green-400">1</span>
+                                            </div>
+                                            <div class="w-full bg-slate-900 rounded-full h-2">
+                                                <div class="bg-green-500 h-2 rounded-full" style={{ width: '100%' }}></div>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div class="flex justify-between text-sm mb-1">
+                                                <span>Idle</span>
+                                                <span class="text-slate-400">5</span>
+                                            </div>
+                                            <div class="w-full bg-slate-900 rounded-full h-2">
+                                                <div class="bg-slate-600 h-2 rounded-full" style={{ width: '83%' }}></div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {activeTab === 'status' && (
+                            <div class="space-y-4">
+                                <div class="glass rounded-lg p-6">
+                                    <h2 class="text-lg font-semibold mb-4">System Status</h2>
+                                    <div class="space-y-3">
+                                        <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded">
+                                            <span>Gateway</span>
+                                            <span class={`text-sm ${gatewayStatus === 'connected' ? 'text-green-400' : 'text-red-400'}`}>
+                                                {gatewayStatus === 'connected' ? '✓ Connected' : '✗ Disconnected'}
+                                            </span>
+                                        </div>
+                                        <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded">
+                                            <span>Memory System</span>
+                                            <span class="text-yellow-400 text-sm">⚠ Empty</span>
+                                        </div>
+                                        <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded">
+                                            <span>Plugins</span>
+                                            <span class="text-slate-400 text-sm">○ 1 installed</span>
+                                        </div>
+                                        <div class="flex items-center justify-between p-3 bg-slate-900/50 rounded">
+                                            <span>Tailscale</span>
+                                            <span class="text-slate-400 text-sm">○ Off</span>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="glass rounded-lg p-6">
+                                    <h3 class="font-semibold mb-3">Quick Actions</h3>
+                                    <div class="space-y-2">
+                                        <button class="w-full bg-indigo-600 hover:bg-indigo-700 py-2 rounded transition-colors text-sm">
+                                            Enable Tailscale
+                                        </button>
+                                        <button class="w-full bg-purple-600 hover:bg-purple-700 py-2 rounded transition-colors text-sm">
+                                            Restart Gateway
+                                        </button>
+                                        <button class="w-full bg-slate-700 hover:bg-slate-600 py-2 rounded transition-colors text-sm">
+                                            View Security Audit
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        }
+
+        ReactDOM.render(<Dashboard />, document.getElementById('root'));
+    </script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "name": "clawbuddy-lite",
+  "version": "1.0.0",
+  "description": "OpenClaw Agent Monitor Dashboard",
+  "main": "index.html",
+  "scripts": {
+    "dev": "python -m http.server 3000",
+    "build": "echo 'Static site, no build needed'",
+    "deploy": "vercel"
+  },
+  "keywords": ["openclaw", "dashboard", "monitoring"],
+  "author": "Vy Mạc",
+  "license": "MIT"
+}
